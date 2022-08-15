@@ -1,0 +1,7 @@
+/src/*.pro.user
+/src/release/**
+/src/debug/**
+/src/Makefile
+/src/Makefile.Debug
+/src/Makefile.Release
+/src/.qmake.stash
