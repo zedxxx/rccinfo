@@ -3,6 +3,8 @@
 
 #include "resinfo.h"
 
+static const QString LOG_CLASS_ID("[ResInfo]");
+
 ResInfo::ResInfo(const QString &fileName)
     : m_fileName(fileName)
 {
@@ -11,8 +13,7 @@ ResInfo::ResInfo(const QString &fileName)
 
 ResInfo::~ResInfo()
 {
-    if (m_data)
-        delete [] m_data;
+    clear();
 }
 
 const QList<ResItem> ResInfo::getInfo(const QString &itemName)
@@ -30,8 +31,38 @@ int ResInfo::getFlags()
     return m_flags;
 }
 
+void ResInfo::setFileName(const QString &fileName)
+{
+    m_fileName = fileName;
+    clear();
+}
+
+void ResInfo::clear()
+{
+    m_info.clear();
+
+    if (m_data)
+        delete [] m_data;
+
+    m_data = nullptr;
+    m_data_len = 0;
+
+    m_formatVersion = 0;
+    m_flags = 0;
+    m_tree = nullptr;
+    m_names = nullptr;
+    m_payloads = nullptr;
+}
+
 bool ResInfo::read(callback_t onItem, void *userData)
 {
+    clear();
+
+    if (m_fileName.isEmpty()) {
+        qInfo() << LOG_CLASS_ID << "File name is empty!";
+        return false;
+    }
+
     if (parseHeader(m_fileName))
         return parseTree(onItem, userData, "", 0);
 
@@ -60,7 +91,7 @@ bool ResInfo::parseHeader(const QString &fileName)
             m_data = nullptr;
             m_data_len = 0;
 
-            qInfo() << "Reading file failed";
+            qInfo() << LOG_CLASS_ID << "Failed read file:" << fileName;
             return false;
         }
     }
@@ -69,7 +100,7 @@ bool ResInfo::parseHeader(const QString &fileName)
 
     // 5 int "pointers"
     if (m_data_len >= 0 && m_data_len < 20) {
-        qInfo() << "Invalid file (size too small):" << m_data_len << "bytes";
+        qInfo() << LOG_CLASS_ID << "Invalid file (size too small):" << m_data_len << "bytes";
         return false;
     }
 
@@ -82,7 +113,7 @@ bool ResInfo::parseHeader(const QString &fileName)
         m_data[offset+2] != 'e' ||
         m_data[offset+3] != 's')
     {
-        qInfo() << "Invalid magic value";
+        qInfo() << LOG_CLASS_ID << "Invalid magic value";
         return false;
     }
     offset += 4;
@@ -107,7 +138,7 @@ bool ResInfo::parseHeader(const QString &fileName)
 
     // Some sanity checking for sizes. This is _not_ a security measure.
     if (m_data_len >= 0 && (tree_offset >= m_data_len || data_offset >= m_data_len || name_offset >= m_data_len)) {
-        qInfo() << "Invalid offset value";
+        qInfo() << LOG_CLASS_ID << "Invalid offset value";
         return false;
     }
 
@@ -121,7 +152,7 @@ bool ResInfo::parseHeader(const QString &fileName)
 
         return true;
     } else {
-        qInfo() << "Unknown format version:" << version;
+        qInfo() << LOG_CLASS_ID << "Unknown format version:" << version;
     }
 
     return false;
@@ -160,7 +191,7 @@ bool ResInfo::parseTree(callback_t onItem, void *userData, const QString &dir, c
         const qint32 child_count = qFromBigEndian<qint32>(m_tree + offset);
         offset += 4;
 
-        //qDebug() << name << "(childs count:" << child_count << ")";
+        //qDebug() << LOG_CLASS_ID << name << "(childs count:" << child_count << ")";
 
         const qint32 first_child_offset = qFromBigEndian<qint32>(m_tree + offset);
         //offset += 4;
@@ -201,7 +232,7 @@ bool ResInfo::parseTree(callback_t onItem, void *userData, const QString &dir, c
             onItem(name, item, userData);
         }
 
-        //qDebug() << name << item;
+        //qDebug() << LOG_CLASS_ID << name << item;
     }
 
     return true;

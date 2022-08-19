@@ -39,7 +39,7 @@ public:
         CompressedZstd = 0x04
     };
 
-    explicit ResInfo(const QString &fileName);
+    explicit ResInfo(const QString &fileName = "");
     ~ResInfo();
 
     bool read(callback_t onItem = nullptr, void *userData = nullptr);
@@ -47,7 +47,10 @@ public:
     int getFormatVersion();
     int getFlags();
 
+    void setFileName(const QString &fileName);
 private:
+    void clear();
+
     bool parseHeader(const QString &fileName);
     bool parseTree(callback_t onItem, void *userData, const QString &dir, const int nodeOffset);
 
