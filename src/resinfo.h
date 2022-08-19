@@ -26,8 +26,6 @@ struct ResItem
     }
 };
 
-typedef void (*callback_t)(const QString &itemName, const ResItem &itemInfo, void *userData);
-
 class ResInfo
 {
 public:
@@ -42,23 +40,27 @@ public:
     explicit ResInfo(const QString &fileName = "");
     ~ResInfo();
 
-    bool read(callback_t onItem = nullptr, void *userData = nullptr);
-    const QList<ResItem> getInfo(const QString &itemName);
-    int getFormatVersion();
-    int getFlags();
+    bool read();
+    QList<ResItem> getInfo(const QString &itemName) const;
+    const QList<QString> getItemNames() const;
+    int getItemsCount() const;
+    int getFormatVersion() const;
+    int getFlags() const;
 
     void setFileName(const QString &fileName);
 private:
     void clear();
 
     bool parseHeader(const QString &fileName);
-    bool parseTree(callback_t onItem, void *userData, const QString &dir, const int nodeOffset);
+    bool parseTree(const QString &dir, const int nodeOffset);
 
-    QString getNodeName(qint32 name_offset);
+    QString getNodeName(qint32 name_offset) const;
 
 private:
     QString m_fileName;
+
     QMultiHash<QString, ResItem> m_info;
+    QList<QString> m_orderedItemNames;
 
     uchar *m_data = nullptr;
     qsizetype m_data_len = 0;

@@ -5,20 +5,6 @@
 
 #include "resinfo.h"
 
-struct ResItemInfo
-{
-    QString name;
-    ResItem info;
-};
-
-void callback(const QString &itemName, const ResItem &itemInfo, void *userData)
-{
-    if (userData) {
-        QList<ResItemInfo> *list = reinterpret_cast<QList<ResItemInfo>*>(userData);
-        list->append(ResItemInfo{itemName, itemInfo});
-    }
-}
-
 const char* get_compressed_str(const int flag)
 {
     if (flag & ResInfo::Flags::Compressed)
@@ -30,43 +16,54 @@ const char* get_compressed_str(const int flag)
     return nullptr;
 }
 
-QByteArray dump_to_json(const int formatVersion, const int flags, const QList<ResItemInfo> &items)
-{
+QByteArray dump_to_json(const ResInfo &info)
+{    
+    const int count = info.getItemsCount();
+
+    qInfo() << "Found" << count << "records";
+
     QJsonObject obj;
 
-    obj.insert("format_version", formatVersion);
-    obj.insert("count", items.count());
+    obj.insert("format_version", info.getFormatVersion());
+    obj.insert("count", count);
 
-    auto comp = get_compressed_str(flags);
-    if (comp) {
+    auto comp = get_compressed_str(info.getFlags());
+    if (comp)
         obj.insert("compressed", comp);
-    }
 
     QJsonArray arr;
-    for (const auto &item: items) {
-        QJsonObject item_obj;
 
-        item_obj.insert("name", item.name);
-        item_obj.insert("size", item.info.size);
+    const QList<QString> list = info.getItemNames();
+    for (const auto &itemName: list) {
 
-        auto comp = get_compressed_str(item.info.flags);
-        if (comp) {
-            item_obj.insert("compressed", comp);
+        const QList<ResItem> items = info.getInfo(itemName);
+        for (const auto &item : items) {
+
+            QJsonObject item_obj;
+
+            item_obj.insert("name", itemName);
+            item_obj.insert("size", item.size);
+
+            auto comp = get_compressed_str(item.flags);
+            if (comp)
+                item_obj.insert("compressed", comp);
+
+            QLocale loc(QLocale::Language(item.language),
+                        QLocale::Country(item.country));
+
+            bool isDefaultLocale = (loc.country() == QLocale::AnyCountry) &&
+                                   (loc.language() == QLocale::AnyLanguage || loc.language() == QLocale::C);
+
+            if (!isDefaultLocale)
+                item_obj.insert("lang", loc.bcp47Name());
+
+            if ((info.getFormatVersion() >= 2) && (item.last_modified != 0)) {
+                QDateTime lm = QDateTime::fromMSecsSinceEpoch(item.last_modified);
+                item_obj.insert("last-modified", lm.toString("yyyy-MM-ddThh:mm:ss.zzzZ"));
+            }
+
+            arr.append(item_obj);
         }
-
-        QLocale loc(QLocale::Language(item.info.language), QLocale::Country(item.info.country));
-        if ( (loc.country() != QLocale::AnyCountry) ||
-             ((loc.language() != QLocale::AnyLanguage) && (loc.language() != QLocale::C)) )
-        {
-            item_obj.insert("lang", loc.bcp47Name());
-        }
-
-        if ((formatVersion >= 2) && (item.info.last_modified != 0)) {
-            QDateTime lm = QDateTime::fromMSecsSinceEpoch(item.info.last_modified);
-            item_obj.insert("last-modified", lm.toString("yyyy-MM-ddThh:mm:ss.zzzZ"));
-        }
-
-        arr.append(item_obj);
     }
 
     obj.insert("items", arr);
@@ -100,31 +97,19 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    QString rccFileName(argv[1]);
+    const QString rccFileName(argv[1]);
+
     ResInfo info(rccFileName);
+    if (!info.read())
+        return 2;
 
-    QList<ResItemInfo> list;
-    if ( info.read(&callback, &list) ) {
+    const QByteArray json = dump_to_json(info);
 
-        qInfo() << "Found" << list.count() << "records";
+    const QString jsonFileName = (argc >= 3) ? argv[2] : rccFileName + ".json";
 
-        QByteArray json = dump_to_json(info.getFormatVersion(), info.getFlags(), list);
+    if (!save_json_to_file(json, jsonFileName))
+        return 3;
 
-        QString jsonFileName;
-        if (argc >= 3) {
-            jsonFileName = argv[2];
-        } else {
-            jsonFileName = rccFileName + ".json";
-        }
-
-        if ( save_json_to_file(json, jsonFileName) ) {
-            qInfo() << "Json saved to:" << jsonFileName;
-        }
-
-        return 0;
-    }
-
-    qInfo() << "Finished with error!";
-
-    return 2;
+    qInfo() << "Json saved to:" << jsonFileName;
+    return 0;
 }

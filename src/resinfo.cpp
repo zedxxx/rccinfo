@@ -16,19 +16,34 @@ ResInfo::~ResInfo()
     clear();
 }
 
-const QList<ResItem> ResInfo::getInfo(const QString &itemName)
+QList<ResItem> ResInfo::getInfo(const QString &itemName) const
 {
-    return m_info.values(itemName);
+    QList<ResItem> list = m_info.values(itemName);
+
+    for(int i = 0, j = list.size(), max = j/2; i < max; i++)
+         list.swapItemsAt(i, j - 1 - i);
+
+    return list;
 }
 
-int ResInfo::getFormatVersion()
+const QList<QString> ResInfo::getItemNames() const
+{
+    return m_orderedItemNames;
+}
+
+int ResInfo::getFormatVersion() const
 {
     return m_formatVersion;
 }
 
-int ResInfo::getFlags()
+int ResInfo::getFlags() const
 {
     return m_flags;
+}
+
+int ResInfo::getItemsCount() const
+{
+    return m_info.size();
 }
 
 void ResInfo::setFileName(const QString &fileName)
@@ -40,6 +55,7 @@ void ResInfo::setFileName(const QString &fileName)
 void ResInfo::clear()
 {
     m_info.clear();
+    m_orderedItemNames.clear();
 
     if (m_data)
         delete [] m_data;
@@ -54,7 +70,7 @@ void ResInfo::clear()
     m_payloads = nullptr;
 }
 
-bool ResInfo::read(callback_t onItem, void *userData)
+bool ResInfo::read()
 {
     clear();
 
@@ -63,10 +79,10 @@ bool ResInfo::read(callback_t onItem, void *userData)
         return false;
     }
 
-    if (parseHeader(m_fileName))
-        return parseTree(onItem, userData, "", 0);
+    if (!parseHeader(m_fileName))
+        return false;
 
-    return false;
+    return parseTree("", 0);
 }
 
 bool ResInfo::parseHeader(const QString &fileName)
@@ -158,7 +174,7 @@ bool ResInfo::parseHeader(const QString &fileName)
     return false;
 }
 
-QString ResInfo::getNodeName(qint32 name_offset)
+QString ResInfo::getNodeName(qint32 name_offset) const
 {
     const quint16 name_length = qFromBigEndian<qint16>(m_names + name_offset);
     name_offset += 2;
@@ -172,11 +188,11 @@ QString ResInfo::getNodeName(qint32 name_offset)
     return name;
 }
 
-bool ResInfo::parseTree(callback_t onItem, void *userData, const QString &dir, const int nodeOffset)
+bool ResInfo::parseTree(const QString &dir, const int nodeOffset)
 {
     int offset = nodeOffset;
 
-    qint32 name_offset = qFromBigEndian<qint32>(m_tree + offset);
+    const qint32 name_offset = qFromBigEndian<qint32>(m_tree + offset);
     offset += 4;
 
     // first node is "root"
@@ -200,7 +216,7 @@ bool ResInfo::parseTree(callback_t onItem, void *userData, const QString &dir, c
 
         for (int i = 0; i < child_count; ++i) {
             // recursion
-            if ( !parseTree(onItem, userData, dir + name + "/", (first_child_offset + i) * node_size) ) {
+            if ( !parseTree(dir + name + "/", (first_child_offset + i) * node_size) ) {
                 return false;
             }
         }
@@ -225,12 +241,13 @@ bool ResInfo::parseTree(callback_t onItem, void *userData, const QString &dir, c
 
         name = dir + name;
 
-        ResItem item{country, language, flags, last_modified, data_size};
-        m_info.insert(name, item);
-
-        if (onItem) {
-            onItem(name, item, userData);
+        if (!m_info.contains(name)) {
+            m_orderedItemNames.append(name);
         }
+
+        const ResItem item{country, language, flags, last_modified, data_size};
+
+        m_info.insert(name, item);
 
         //qDebug() << LOG_CLASS_ID << name << item;
     }
