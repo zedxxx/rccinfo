@@ -12,6 +12,7 @@ struct ResItem
     qint32 flags;
     quint64 last_modified;
     qint32 size;
+    qint32 offset;
 
     friend QDebug operator<< (QDebug stream, const ResItem &item)
     {
@@ -20,7 +21,8 @@ struct ResItem
                << "language: " << item.language << ", "
                << "flags: " << item.flags << ", "
                << "last-modified: " << item.last_modified << ", "
-               << "size: " << item.size
+               << "size: " << item.size << ", "
+               << "offset: " << item.offset
                << ")";
         return stream;
     }
@@ -37,17 +39,17 @@ public:
         CompressedZstd = 0x04
     };
 
-    explicit ResInfo(const QString &fileName = "");
+    explicit ResInfo();
     ~ResInfo();
 
-    bool read();
+    bool read(const QString &fileName);
+
     QList<ResItem> getInfo(const QString &itemName) const;
     const QList<QString> getItemNames() const;
     int getItemsCount() const;
     int getFormatVersion() const;
     int getFlags() const;
 
-    void setFileName(const QString &fileName);
 private:
     void clear();
 
@@ -57,8 +59,6 @@ private:
     QString getNodeName(qint32 name_offset) const;
 
 private:
-    QString m_fileName;
-
     QMultiHash<QString, ResItem> m_info;
     QList<QString> m_orderedItemNames;
 

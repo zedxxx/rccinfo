@@ -3,10 +3,9 @@
 
 #include "resinfo.h"
 
-static const QString LOG_CLASS_ID("[ResInfo]");
+static const char *LOG_MESSAGE_ID = "[ResInfo]";
 
-ResInfo::ResInfo(const QString &fileName)
-    : m_fileName(fileName)
+ResInfo::ResInfo()
 {
 
 }
@@ -20,6 +19,7 @@ QList<ResItem> ResInfo::getInfo(const QString &itemName) const
 {
     QList<ResItem> list = m_info.values(itemName);
 
+    // reverse list to return items in the insertion order
     for(int i = 0, j = list.size(), max = j/2; i < max; i++)
          list.swapItemsAt(i, j - 1 - i);
 
@@ -46,12 +46,6 @@ int ResInfo::getItemsCount() const
     return m_info.size();
 }
 
-void ResInfo::setFileName(const QString &fileName)
-{
-    m_fileName = fileName;
-    clear();
-}
-
 void ResInfo::clear()
 {
     m_info.clear();
@@ -70,16 +64,16 @@ void ResInfo::clear()
     m_payloads = nullptr;
 }
 
-bool ResInfo::read()
+bool ResInfo::read(const QString &fileName)
 {
     clear();
 
-    if (m_fileName.isEmpty()) {
-        qInfo() << LOG_CLASS_ID << "File name is empty!";
+    if (fileName.isEmpty()) {
+        qInfo() << LOG_MESSAGE_ID << "File name is empty!";
         return false;
     }
 
-    if (!parseHeader(m_fileName))
+    if (!parseHeader(fileName))
         return false;
 
     return parseTree("", 0);
@@ -107,7 +101,7 @@ bool ResInfo::parseHeader(const QString &fileName)
             m_data = nullptr;
             m_data_len = 0;
 
-            qInfo() << LOG_CLASS_ID << "Failed read file:" << fileName;
+            qInfo() << LOG_MESSAGE_ID << "Failed read file:" << fileName;
             return false;
         }
     }
@@ -116,7 +110,7 @@ bool ResInfo::parseHeader(const QString &fileName)
 
     // 5 int "pointers"
     if (m_data_len >= 0 && m_data_len < 20) {
-        qInfo() << LOG_CLASS_ID << "Invalid file (size too small):" << m_data_len << "bytes";
+        qInfo() << LOG_MESSAGE_ID << "Invalid file (size too small):" << m_data_len << "bytes";
         return false;
     }
 
@@ -129,7 +123,7 @@ bool ResInfo::parseHeader(const QString &fileName)
         m_data[offset+2] != 'e' ||
         m_data[offset+3] != 's')
     {
-        qInfo() << LOG_CLASS_ID << "Invalid magic value";
+        qInfo() << LOG_MESSAGE_ID << "Invalid magic value";
         return false;
     }
     offset += 4;
@@ -154,7 +148,7 @@ bool ResInfo::parseHeader(const QString &fileName)
 
     // Some sanity checking for sizes. This is _not_ a security measure.
     if (m_data_len >= 0 && (tree_offset >= m_data_len || data_offset >= m_data_len || name_offset >= m_data_len)) {
-        qInfo() << LOG_CLASS_ID << "Invalid offset value";
+        qInfo() << LOG_MESSAGE_ID << "Invalid offset value";
         return false;
     }
 
@@ -168,7 +162,7 @@ bool ResInfo::parseHeader(const QString &fileName)
 
         return true;
     } else {
-        qInfo() << LOG_CLASS_ID << "Unknown format version:" << version;
+        qInfo() << LOG_MESSAGE_ID << "Unknown format version:" << version;
     }
 
     return false;
@@ -203,11 +197,10 @@ bool ResInfo::parseTree(const QString &dir, const int nodeOffset)
 
     if ( flags & Flags::Directory ) {
         // Directory
-
         const qint32 child_count = qFromBigEndian<qint32>(m_tree + offset);
         offset += 4;
 
-        //qDebug() << LOG_CLASS_ID << name << "(childs count:" << child_count << ")";
+        //qDebug() << LOG_MESSAGE_ID << name << "(childs count:" << child_count << ")";
 
         const qint32 first_child_offset = qFromBigEndian<qint32>(m_tree + offset);
         //offset += 4;
@@ -228,7 +221,7 @@ bool ResInfo::parseTree(const QString &dir, const int nodeOffset)
         const qint16 language = qFromBigEndian<qint16>(m_tree + offset);
         offset += 2;
 
-        const qint32 data_offset = qFromBigEndian<qint32>(m_tree + offset);
+        qint32 data_offset = qFromBigEndian<qint32>(m_tree + offset);
         offset += 4;
 
         quint64 last_modified = 0;
@@ -238,6 +231,10 @@ bool ResInfo::parseTree(const QString &dir, const int nodeOffset)
         }
 
         const qint32 data_size = qFromBigEndian<qint32>(m_payloads + data_offset);
+        data_offset += 4;
+
+        // absolute offset
+        data_offset += m_payloads - m_data;
 
         name = dir + name;
 
@@ -245,11 +242,18 @@ bool ResInfo::parseTree(const QString &dir, const int nodeOffset)
             m_orderedItemNames.append(name);
         }
 
-        const ResItem item{country, language, flags, last_modified, data_size};
+        const ResItem item{
+            country,
+            language,
+            flags,
+            last_modified,
+            data_size,
+            data_offset
+        };
 
         m_info.insert(name, item);
 
-        //qDebug() << LOG_CLASS_ID << name << item;
+        //qDebug() << LOG_MESSAGE_ID << name << item;
     }
 
     return true;

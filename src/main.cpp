@@ -32,6 +32,7 @@ QByteArray dump_to_json(const ResInfo &info)
         obj.insert("compressed", comp);
 
     QJsonArray arr;
+    int item_id = 0;
 
     const QList<QString> list = info.getItemNames();
     for (const auto &itemName: list) {
@@ -41,8 +42,12 @@ QByteArray dump_to_json(const ResInfo &info)
 
             QJsonObject item_obj;
 
+            item_obj.insert("id", item_id);
+            item_id++;
+
             item_obj.insert("name", itemName);
             item_obj.insert("size", item.size);
+            item_obj.insert("offset", item.offset);
 
             auto comp = get_compressed_str(item.flags);
             if (comp)
@@ -99,8 +104,8 @@ int main(int argc, char *argv[])
 
     const QString rccFileName(argv[1]);
 
-    ResInfo info(rccFileName);
-    if (!info.read())
+    ResInfo info;
+    if (!info.read(rccFileName))
         return 2;
 
     const QByteArray json = dump_to_json(info);
